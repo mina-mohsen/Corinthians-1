@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>مسابقة سفر رومية</title>
-    <!-- Firebase SDKs (Compatibility Version) -->
+    <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore-compat.js"></script>
@@ -17,6 +17,7 @@
             --danger: #c0392b;
             --light: #f4f7f6;
             --white: #ffffff;
+            --skipped: #f39c12;
         }
 
         * { 
@@ -43,7 +44,6 @@
             border-radius: 20px; 
             box-shadow: 0 10px 25px rgba(0,0,0,0.15); 
             position: relative;
-            margin-bottom: 20px;
         }
         
         header { 
@@ -52,12 +52,12 @@
             padding-bottom: 10px; 
             margin-bottom: 15px; 
             position: sticky; 
-            top: -16px; /* Adjust for padding */
+            top: -16px; 
             background: var(--white); 
             z-index: 100; 
         }
 
-        h1 { font-size: 1.4rem; margin: 10px 0; color: var(--primary); }
+        h1 { font-size: 1.3rem; margin: 10px 0; color: var(--primary); }
 
         #timer-box { 
             background: #fdedec; 
@@ -78,36 +78,27 @@
             border: 2px solid #ddd; 
             border-radius: 12px; 
             font-size: 1rem; 
-            outline: none; 
             width: 100%; 
-            transition: border-color 0.3s;
         }
-        input:focus { border-color: var(--primary); }
 
         .btn-main { 
             background: var(--primary); 
             color: white; 
-            padding: 15px; 
+            padding: 14px; 
             border: none; 
             border-radius: 12px; 
-            font-size: 1.1rem; 
+            font-size: 1rem; 
             font-weight: bold; 
             cursor: pointer; 
-            width: 100%;
-            transition: transform 0.1s, opacity 0.2s;
+            transition: transform 0.1s;
             touch-action: manipulation;
         }
-        .btn-main:active { transform: scale(0.98); opacity: 0.9; }
+        .btn-main:active { transform: scale(0.97); }
 
-        .btn-admin-link { 
-            position: absolute; 
-            top: 5px; 
-            left: 5px; 
-            background: none; 
-            border: none; 
-            color: #ccc; 
-            cursor: pointer; 
-            font-size: 0.7rem; 
+        .btn-skip {
+            background: #ecf0f1;
+            color: var(--secondary);
+            border: 1px solid #bdc3c7;
         }
 
         .option-item { 
@@ -118,13 +109,11 @@
             border: 2px solid #ebedef; 
             margin-bottom: 8px; 
             font-size: 0.95rem;
-            transition: all 0.2s;
         }
         .option-item.selected { 
             background: #ebf5fb; 
-            border-color: var(--secondary); 
+            border-color: var(--primary); 
             font-weight: bold; 
-            color: var(--secondary);
         }
 
         .nav-grid { 
@@ -145,20 +134,11 @@
             font-size: 0.8rem; 
             cursor: pointer; 
         }
-        .nav-dot.current { background: var(--primary); color: white; }
-        .nav-dot.answered { background: #d4e6f1; border: 1px solid var(--secondary); }
+        .nav-dot.current { background: var(--primary); color: white; border: 2px solid #34495e; }
+        .nav-dot.answered { background: var(--success); color: white; }
+        .nav-dot.skipped { background: var(--skipped); color: white; }
 
-        /* Responsive adjustments for tiny screens */
-        @media (max-width: 360px) {
-            h1 { font-size: 1.2rem; }
-            .option-item { font-size: 0.85rem; padding: 12px; }
-            .btn-main { padding: 12px; font-size: 1rem; }
-        }
-
-        .admin-table-wrapper { overflow-x: auto; width: 100%; }
-        .admin-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.8rem; min-width: 400px; }
-        .admin-table th, .admin-table td { padding: 8px; border: 1px solid #ddd; text-align: center; }
-        .admin-table th { background: var(--primary); color: white; }
+        .btn-admin-link { position: absolute; top: 5px; left: 5px; background: none; border: none; color: #ccc; font-size: 0.7rem; }
     </style>
 </head>
 <body>
@@ -170,47 +150,46 @@
         <div id="timer-box" style="display:none;">20:00</div>
     </header>
 
-    <!-- Registration Screen -->
     <div id="reg-screen" class="screen active-screen">
         <div style="text-align: center; color: var(--danger); font-weight: bold; padding: 12px; background: #fff8f0; border-radius: 10px; border: 1px dashed var(--danger); font-size: 0.9rem;">
-            تنبيه: الاختبار متاح لمرة واحدة فقط.<br>
-            سيتم حفظ نتيجتك تلقائياً.
+            تنبيه: الاختبار متاح لمرة واحدة فقط.
         </div>
         <input type="text" id="u-name" placeholder="الاسم بالكامل">
         <input type="tel" id="u-phone" placeholder="رقم الموبايل">
         <button class="btn-main" onclick="startQuiz()">بدء الاختبار</button>
     </div>
 
-    <!-- Quiz Screen -->
     <div id="quiz-screen" class="screen">
         <div id="q-wrapper"></div>
-        <div style="display: flex; gap: 10px;">
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <button class="btn-main" style="background:#95a5a6;" onclick="nav(-1)">السابق</button>
             <button class="btn-main" onclick="nav(1)">التالي</button>
         </div>
-        <button id="finish-btn" class="btn-main" style="background:var(--success); display: none;" onclick="finish()">إنهاء وإرسال النتيجة</button>
+        
+        <button class="btn-main btn-skip" id="skip-btn" onclick="skipCurrent()">تأجيل السؤال (لاحقاً)</button>
+        
+        <button id="finish-btn" class="btn-main" style="background:var(--success); display: none; margin-top: 5px;" onclick="finish()">إنهاء وإرسال النتيجة</button>
+        
         <div class="nav-grid" id="nav-grid"></div>
     </div>
 
-    <!-- Results Screen -->
     <div id="results-screen" class="screen">
         <div style="text-align:center; padding: 20px 0;">
             <h2 style="color: var(--success);">تم التسجيل بنجاح!</h2>
-            <div id="final-score" style="font-size: 3.5rem; font-weight: bold; color: var(--primary); margin: 10px 0;">0/60</div>
-            <p>شكراً لمشاركتك. يمكنك إغلاق الصفحة.</p>
+            <div id="final-score" style="font-size: 3.5rem; font-weight: bold; color: var(--primary);">0/60</div>
+            <p>شكراً لمشاركتك.</p>
         </div>
     </div>
 
-    <!-- Admin Screen -->
     <div id="admin-screen" class="screen">
-        <h2 style="text-align: center;">لوحة النتائج</h2>
-        <div class="admin-table-wrapper" id="admin-content">جاري التحميل...</div>
-        <button class="btn-main" style="margin-top: 15px;" onclick="location.reload()">خروج</button>
+        <h2 style="text-align: center;">النتائج</h2>
+        <div id="admin-content" style="overflow-x:auto;">جاري التحميل...</div>
+        <button class="btn-main" onclick="location.reload()">خروج</button>
     </div>
 </div>
 
 <script>
-    // Firebase Config
     const firebaseConfig = {
       apiKey: "AIzaSyAinHAVg6ZcZW_i04Miz3uwNXIjx7Y-Q3Y",
       authDomain: "romans-quiz.firebaseapp.com",
@@ -223,7 +202,7 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
     const auth = firebase.auth();
-    const ATTEMPT_KEY = "romans_quiz_locked_v1";
+    const ATTEMPT_KEY = "romans_lock_v2";
 
     const questions = [
         { q: "بماذا يصف بولس نفسه في بداية الرسالة؟", options: ["خادم للكنيسة ورسول مختار", "عبد ليسوع المسيح ورسول مفرز", "تلميذ مخلص ومبشر للامم", "كاهن العهد وخادم للشعوب"], correct: 1 },
@@ -245,7 +224,7 @@
         { q: "ماذا فعل إبراهيم فحُسب له ذلك براً؟", options: ["صام لله", "آمن بالله", "قدم محرقة", "بنى هيكل"], correct: 1 },
         { q: "متى حُسب البر لإبراهيم؟", options: ["في الختان", "في الغرلة", "بعد موته", "بين الاثنين"], correct: 1 },
         { q: "إبراهيم هو أب لكل الذين يؤمنون وهم في...؟", options: ["في الغرلة", "في الختان", "في الهيكل", "في المذبح"], correct: 0 },
-        { q: "ماذا يولد الضيق في حياة المؤمنين؟", options: ["يولد حزناً", "يولد صبراً", "يولد يأساً", "يولد قلقاً"], correct: 1 },
+        { q: "ماذا يولد الضيق في حياة المؤمنين؟", options: ["يولد حزناً", "يولد صبراً", "يولد يأسا", "يولد قلقاً"], correct: 1 },
         { q: "بماذا انسكبت محبة الله في قلوبنا؟", options: ["بالروح الحق", "بالروح القدس", "بالدم الثمين", "بالحق المبين"], correct: 1 },
         { q: "ونحن بعد خطاة، ماذا فعل المسيح لأجلنا؟", options: ["أحبنا فقط", "شفي مرضانا", "مات لاجلنا", "علمنا الحق"], correct: 2 },
         { q: "بواسطة من دخلت الخطية إلى العالم كله؟", options: ["بإنسان واحد", "بشعب واحد", "بملاك واحد", "بفكر واحد"], correct: 0 },
@@ -284,69 +263,57 @@
         { q: "من هما العاملان مع بولس في المسيح؟", options: ["أكيلا وأكيلا", "بريسكيلا وأكيلا", "لوقا ومرقس", "سمعان وبطرس"], correct: 1 },
         { q: "سلموا بعضكم على بعض بـ...؟", options: ["بكلام طيب", "قبلة مقدسة", "رسالة حب", "هدية قيمة"], correct: 1 },
         { q: "إله السلام سيسحق... تحت أرجلكم؟", options: ["الاعداء", "الشيطان", "المرضى", "الموتى"], correct: 1 },
-        { q: "من هو كاتب الرسالة الفعلي (المملي عليه)؟", options: ["تيموثاوس", "تيرتيوس", "غايس", "لوقا"], correct: 1 },
+        { q: "من هو كاتب الرسالة الفعلي؟", options: ["تيموثاوس", "تيرتيوس", "غايس", "لوقا"], correct: 1 },
         { q: "بماذا يختم بولس الرسالة؟", options: ["بنعمة الرب", "بصلاة طويلة", "بشكر الناس", "بتحذير شديد"], correct: 0 }
     ];
 
-    let current = 0, answers = new Array(questions.length).fill(null), timeLeft = 20 * 60, timer;
+    let current = 0, answers = new Array(questions.length).fill(null), skipped = new Set(), timeLeft = 20 * 60, timer;
 
     async function startQuiz() {
-        const name = document.getElementById('u-name').value.trim();
-        const phone = document.getElementById('u-phone').value.trim();
-        if(!name || !phone) return alert("من فضلك أدخل الاسم ورقم الموبايل.");
-        
-        if(localStorage.getItem(ATTEMPT_KEY)) {
-            alert("عذراً، لقد شاركت مسبقاً من هذا الجهاز.");
-            return;
-        }
-
+        if(!document.getElementById('u-name').value.trim() || !document.getElementById('u-phone').value.trim()) return alert("أدخل بياناتك أولاً.");
+        if(localStorage.getItem(ATTEMPT_KEY)) return alert("لقد شاركت مسبقاً.");
         try {
             await auth.signInAnonymously();
             switchScreen('quiz-screen');
             document.getElementById('timer-box').style.display = 'inline-block';
             initQuiz();
             startTimer();
-            window.scrollTo(0,0);
-        } catch(e) { alert("فشل الاتصال بالخادم: " + e.message); }
+        } catch(e) { alert("Error: " + e.message); }
     }
 
     function initQuiz() {
         const wrapper = document.getElementById('q-wrapper');
         const grid = document.getElementById('nav-grid');
         wrapper.innerHTML = ""; grid.innerHTML = "";
-        
         questions.forEach((q, i) => {
             const div = document.createElement('div');
             div.className = `screen ${i===0?'active-screen':''}`;
             div.id = `q-cnt-${i}`;
-            div.innerHTML = `
-                <div style="font-weight:bold; margin-bottom:15px; color:var(--primary); line-height:1.4;">السؤال ${i+1}: ${q.q}</div>
-                ${q.options.map((opt, idx) => `
-                    <div class="option-item" id="opt-${i}-${idx}" onclick="select(${i}, ${idx})">${opt}</div>
-                `).join('')}
-            `;
+            div.innerHTML = `<div style="font-weight:bold; margin-bottom:15px;">${i+1}. ${q.q}</div>${q.options.map((opt, idx) => `<div class="option-item" id="opt-${i}-${idx}" onclick="select(${i}, ${idx})">${opt}</div>`).join('')}`;
             wrapper.appendChild(div);
-
             const dot = document.createElement('div');
             dot.className = `nav-dot ${i===0?'current':''}`;
-            dot.id = `dot-${i}`;
-            dot.innerText = i+1;
-            dot.onclick = () => jump(i);
+            dot.id = `dot-${i}`; dot.innerText = i+1; dot.onclick = () => jump(i);
             grid.appendChild(dot);
         });
     }
 
     function select(qIdx, optIdx) {
         answers[qIdx] = optIdx;
-        document.querySelectorAll(`#q-cnt-${qIdx} .option-item`).forEach((el, idx) => {
-            el.classList.toggle('selected', idx === optIdx);
-        });
-        document.getElementById(`dot-${qIdx}`).classList.add('answered');
-        
-        // Auto-scroll slightly down to options if needed
-        if(current < questions.length - 1) {
-            setTimeout(() => nav(1), 300);
+        skipped.delete(qIdx);
+        document.querySelectorAll(`#q-cnt-${qIdx} .option-item`).forEach((el, idx) => el.classList.toggle('selected', idx === optIdx));
+        const dot = document.getElementById(`dot-${qIdx}`);
+        dot.classList.remove('skipped');
+        dot.classList.add('answered');
+        setTimeout(() => nav(1), 300);
+    }
+
+    function skipCurrent() {
+        if(answers[current] === null) {
+            skipped.add(current);
+            document.getElementById(`dot-${current}`).classList.add('skipped');
         }
+        nav(1);
     }
 
     function jump(n) {
@@ -355,16 +322,11 @@
         current = n;
         document.getElementById(`q-cnt-${current}`).classList.add('active-screen');
         document.getElementById(`dot-${current}`).classList.add('current');
-        
-        // Show/Hide finish button only on last question
         document.getElementById('finish-btn').style.display = (current === questions.length - 1) ? 'block' : 'none';
         window.scrollTo(0,0);
     }
 
-    function nav(step) {
-        let t = current + step;
-        if(t >= 0 && t < questions.length) jump(t);
-    }
+    function nav(step) { let t = current + step; if(t >= 0 && t < questions.length) jump(t); }
 
     function startTimer() {
         timer = setInterval(() => {
@@ -376,14 +338,15 @@
     }
 
     async function finish(auto = false) {
-        if(!auto && !confirm("هل أنت متأكد من إنهاء المسابقة وإرسال إجاباتك؟")) return;
+        const unans = answers.filter(a => a === null).length;
+        if(!auto && unans > 0 && !confirm(`لديك ${unans} سؤالاً لم تجب عليها. هل تريد الإرسال على أي حال؟`)) return;
+        if(!auto && unans === 0 && !confirm("هل تريد إرسال النتيجة؟")) return;
         
         clearInterval(timer);
         let score = 0;
         questions.forEach((q, i) => { if(answers[i] === q.correct) score++; });
         
         try {
-            // Path must follow rule: /artifacts/{appId}/public/data/{collectionName}
             const appId = typeof __app_id !== 'undefined' ? __app_id : 'romans-quiz';
             await db.collection("artifacts").doc(appId).collection("public").doc("data").collection("results").add({
                 name: document.getElementById('u-name').value,
@@ -391,54 +354,27 @@
                 score: score,
                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
             });
-            
             localStorage.setItem(ATTEMPT_KEY, "true");
             switchScreen('results-screen');
             document.getElementById('final-score').innerText = `${score}/60`;
             document.getElementById('timer-box').style.display = 'none';
-            window.scrollTo(0,0);
-        } catch(e) { 
-            alert("خطأ في حفظ النتيجة: " + e.message); 
-            console.error(e);
-        }
+        } catch(e) { alert("Error saving result."); }
     }
 
-    function showAdminLogin() {
-        const pass = prompt("كلمة السر:");
-        if(pass === "24724") { 
-            switchScreen('admin-screen'); 
-            loadAdmin(); 
-        }
-    }
-
-    function switchScreen(id) {
-        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active-screen'));
-        document.getElementById(id).classList.add('active-screen');
-    }
+    function showAdminLogin() { if(prompt("Pass:") === "24724") { switchScreen('admin-screen'); loadAdmin(); } }
+    function switchScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.remove('active-screen')); document.getElementById(id).classList.add('active-screen'); }
 
     async function loadAdmin() {
         const content = document.getElementById('admin-content');
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'romans-quiz';
         try {
             const snap = await db.collection("artifacts").doc(appId).collection("public").doc("data").collection("results").get();
-            if(snap.empty) {
-                content.innerHTML = "لا توجد نتائج مسجلة بعد.";
-                return;
-            }
-            
-            let data = [];
-            snap.forEach(d => data.push(d.data()));
-            data.sort((a, b) => b.score - a.score);
-
-            let h = `<table class="admin-table"><tr><th>الاسم</th><th>الدرجة</th><th>الموبايل</th></tr>`;
-            data.forEach(r => { 
-                h += `<tr><td>${r.name}</td><td>${r.score}</td><td>${r.phone}</td></tr>`; 
-            });
+            let data = []; snap.forEach(d => data.push(d.data()));
+            data.sort((a,b) => b.score - a.score);
+            let h = `<table style="width:100%; border-collapse:collapse; font-size:0.8rem;"><tr style="background:#eee;"><th>الاسم</th><th>الدرجة</th></tr>`;
+            data.forEach(r => h += `<tr style="border-bottom:1px solid #ddd; text-align:center;"><td>${r.name}</td><td>${r.score}</td></tr>`);
             content.innerHTML = h + "</table>";
-        } catch(e) { 
-            content.innerHTML = "خطأ في التحميل: تأكد من إعدادات Firestore بصلاحيات القراءة."; 
-            console.error(e);
-        }
+        } catch(e) { content.innerHTML = "Error loading."; }
     }
 </script>
 </body>
