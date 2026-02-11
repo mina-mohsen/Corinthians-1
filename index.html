@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>مسابقة سفر رومية - نظام سحابي</title>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore-compat.js"></script>
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --secondary: #34495e;
+            --accent: #d35400;
+            --success: #27ae60;
+            --danger: #c0392b;
+            --light: #f4f7f6;
+            --yellow: #f1c40f;
+            --white: #ffffff;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: #bdc3c7; margin: 0; padding: 10px; display: flex; justify-content: center; min-height: 100vh; }
+        .container { width: 100%; max-width: 700px; background: var(--white); padding: 20px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); position: relative; }
+        
+        header { text-align: center; border-bottom: 3px solid var(--light); padding-bottom: 15px; margin-bottom: 20px; position: sticky; top: 0; background: var(--white); z-index: 100; }
+        #timer-box { background: #fdedec; color: var(--danger); padding: 8px 20px; border-radius: 50px; font-weight: 800; font-size: 1.3rem; display: inline-block; margin-top: 10px; border: 2px solid var(--danger); }
+        
+        .screen { display: none; flex-direction: column; gap: 15px; }
+        .active-screen { display: flex; }
+
+        input { padding: 15px; border: 2px solid #ddd; border-radius: 12px; font-size: 1.1rem; outline: none; width: 100%; }
+        .btn-main { background: var(--primary); color: white; padding: 18px; border: none; border-radius: 12px; font-size: 1.2rem; font-weight: bold; cursor: pointer; }
+        .btn-admin-link { position: absolute; top: 10px; left: 10px; background: none; border: none; color: #999; cursor: pointer; font-size: 0.8rem; }
+
+        .option-item { background: #f8f9f9; padding: 16px; border-radius: 15px; cursor: pointer; border: 2px solid #ebedef; margin-bottom: 10px; }
+        .option-item.selected { background: #ebf5fb; border-color: var(--secondary); font-weight: bold; }
+
+        .nav-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(34px, 1fr)); gap: 5px; margin-top: 25px; padding-top: 20px; border-top: 2px solid #eee; }
+        .nav-dot { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; background: #eee; border-radius: 8px; font-size: 0.7rem; cursor: pointer; }
+        .nav-dot.current { background: var(--primary); color: white; }
+        .nav-dot.answered { background: #d4e6f1; border: 1px solid var(--secondary); }
+
+        .admin-table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 0.8rem; }
+        .admin-table th, .admin-table td { padding: 8px; border: 1px solid #ddd; text-align: center; }
+        .admin-table th { background: var(--primary); color: white; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <button class="btn-admin-link" onclick="showAdminLogin()">إدارة</button>
+    <header>
+        <h1>مسابقة سفر رومية (60 سؤال)</h1>
+        <div id="timer-box" style="display:none;">20:00</div>
+    </header>
+
+    <div id="reg-screen" class="screen active-screen">
+        <div style="text-align: center; color: var(--danger); font-weight: bold; padding: 15px; background: #fff8f0; border-radius: 10px; border: 1px dashed var(--danger);">
+            تنبيه: الاختبار متاح لمرة واحدة فقط.<br>
+            سيتم حفظ نتيجتك تلقائياً في السحابة.
+        </div>
+        <input type="text" id="u-name" placeholder="الاسم بالكامل">
+        <input type="tel" id="u-phone" placeholder="رقم الموبايل">
+        <button class="btn-main" onclick="startQuiz()">بدء الاختبار</button>
+    </div>
+
+    <div id="quiz-screen" class="screen">
+        <div id="q-wrapper"></div>
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button class="btn-main" style="flex:1; background:#95a5a6;" onclick="nav(-1)">السابق</button>
+            <button class="btn-main" style="flex:1;" onclick="nav(1)">التالي</button>
+        </div>
+        <button class="btn-main" style="background:var(--success); margin-top: 10px;" onclick="finish()">إنهاء وإرسال النتيجة</button>
+        <div class="nav-grid" id="nav-grid"></div>
+    </div>
+
+    <div id="results-screen" class="screen">
+        <div style="text-align:center;">
+            <h2 style="color: var(--success);">تم تسجيل نتيجتك بنجاح!</h2>
+            <div id="final-score" style="font-size: 3rem; font-weight: bold; color: var(--primary);">0/60</div>
+            <p>يمكنك إغلاق الصفحة الآن.</p>
+        </div>
+    </div>
+
+    <div id="admin-screen" class="screen">
+        <h2>لوحة نتائج رومية</h2>
+        <div id="admin-content">جاري التحميل...</div>
+        <button class="btn-main" onclick="location.reload()">خروج</button>
+    </div>
+</div>
+
+<script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyAinHAVg6ZcZW_i04Miz3uwNXIjx7Y-Q3Y",
+      authDomain: "romans-quiz.firebaseapp.com",
+      projectId: "romans-quiz",
+      storageBucket: "romans-quiz.firebasestorage.app",
+      messagingSenderId: "838261164020",
+      appId: "1:838261164020:web:aaab35caf6c35c89411ba1",
+      measurementId: "G-WG5GQZETRJ"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const auth = firebase.auth();
+    const ATTEMPT_KEY = "romans_cloud_lock_final";
+
+    const questions = [
+        { q: "بماذا يصف بولس نفسه في بداية الرسالة؟", options: ["خادم للكنيسة ورسول مختار", "عبد ليسوع المسيح ورسول مفرز", "تلميذ مخلص ومبشر للامم", "كاهن العهد وخادم للشعوب"], correct: 1 },
+        { q: "بماذا تعين ابن الله في قوة من جهة الروح؟", options: ["بصعوده للسماء", "بقيامته للموت", "بقيامته للاموات", "بظهوره للنور"], correct: 2 },
+        { q: "لماذا يشكر بولس الله لأجل مؤمني روما؟", options: ["لان صومهم عظيم", "لان ايمانهم مشهور", "لان حبهم معروف", "لان صلاتهم قوية"], correct: 1 },
+        { q: "إنجيل المسيح هو قوة الله للخلاص لكل من...؟", options: ["يعمل ويجتهد", "يصلي ويصوم", "يؤمن ويرجو", "يؤمن ويصدق"], correct: 3 },
+        { q: "الباقي بـ... يعيش؟", options: ["بالتقوى", "بالاعمال", "بالايمان", "بالصلاة"], correct: 2 },
+        { q: "ماذا استبدل الناس الذين ضلوا في أفكارهم؟", options: ["مجد الله الحق", "مجد الله الباقي", "مجد الله الفاني", "مجد الله القوي"], correct: 2 },
+        { q: "بماذا يجازي الله كل واحد في يوم الدينونة؟", options: ["حسب نيته فقط", "حسب ماله فقط", "حسب اعماله فقط", "حسب علمه فقط"], correct: 2 },
+        { q: "يقول الرسول بولس أنه ليس عند الله...؟", options: ["تغيير ابدا", "محاباة ابدا", "نسيان ابدا", "تراجع ابدا"], correct: 1 },
+        { q: "من هم الأبرار حقيقة أمام الله بخصوص الناموس؟", options: ["قراء الناموس", "حفظة الناموس", "سامعو الناموس", "عاملو الناموس"], correct: 3 },
+        { q: "أين يظهر عمل الناموس مكتوباً لدى الأمم؟", options: ["على الكتب", "في قلوبهم", "في اذهانهم", "على الورق"], correct: 1 },
+        { q: "الختان الحقيقي هو ختان القلب بـ...؟", options: ["بالمسيح", "بالايمان", "بالروح", "بالحق"], correct: 2 },
+        { q: "ما هي الميزة الكبرى التي كانت لليهود؟", options: ["كثرة المال", "أقوال الله", "قوة الجيش", "عظم الارض"], correct: 1 },
+        { q: "ما هو حال جميع الناس (يهوداً ويونانيين)؟", options: ["تحت النعمة", "تحت الخطية", "تحت الحكم", "تحت الموت"], correct: 1 },
+        { q: "بماذا تكون معرفة الخطية حسب الناموس؟", options: ["بالضمير", "بالناموس", "بالكلام", "بالفعل"], correct: 1 },
+        { q: "بماذا يتبرر المؤمنون مجاناً أمام الله؟", options: ["بنعمة الله", "بأعمالهم", "بصبرهم", "بفقرهم"], correct: 0 },
+        { q: "أين استنتج بولس أنه لا يوجد مكان للافتخار؟", options: ["في العمل", "في الختان", "في الايمان", "في الفكر"], correct: 2 },
+        { q: "ماذا فعل إبراهيم فحُسب له ذلك براً؟", options: ["صام لله", "آمن بالله", "قدم محرقة", "بنى هيكل"], correct: 1 },
+        { q: "متى حُسب البر لإبراهيم (بخصوص الختان)؟", options: ["في الختان", "في الغرلة", "بعد موته", "بين الاثنين"], correct: 1 },
+        { q: "إبراهيم هو أب لكل الذين يؤمنون وهم في...؟", options: ["في الغرلة", "في الختان", "في الهيكل", "في المذبح"], correct: 0 },
+        { q: "ماذا يولد الضيق في حياة المؤمنين؟", options: ["يولد حزناً", "يولد صبراً", "يولد يأساً", "يولد قلقاً"], correct: 1 },
+        { q: "بماذا انسكبت محبة الله في قلوبنا؟", options: ["بالروح الحق", "بالروح القدس", "بالدم الثمين", "بالحق المبين"], correct: 1 },
+        { q: "ونحن بعد خطاة، ماذا فعل المسيح لأجلنا؟", options: ["أحبنا فقط", "شفي مرضانا", "مات لاجلنا", "علمنا الحق"], correct: 2 },
+        { q: "بواسطة من دخلت الخطية إلى العالم كله؟", options: ["بإنسان واحد", "بشعب واحد", "بملاك واحد", "بفكر واحد"], correct: 0 },
+        { q: "حيث كثرت الخطية هناك ازدادت...؟", options: ["الدينونة جدا", "الرحمة جدا", "النعمة جدا", "القسوة جدا"], correct: 2 },
+        { q: "بماذا دُفنا مع المسيح للموت في العماد؟", options: ["بالصلاة", "بالمعمودية", "بالايمان", "بالصوم"], correct: 1 },
+        { q: "ما هي أجرة الخطية في النهاية؟", options: ["هي الموت", "هي الحزن", "هي المرض", "هي الفقر"], correct: 0 },
+        { q: "ما هي موهبة الله في المسيح يسوع؟", options: ["غنى واسع", "حياة ابدية", "صحة قوية", "ملك عظيم"], correct: 1 },
+        { q: "الناموس يسود على الإنسان ما دام هو...؟", options: ["إنسان حي", "إنسان بار", "إنسان مؤمن", "إنسان تائب"], correct: 0 },
+        { q: "بماذا يخدم بولس ناموس الله فعلياً؟", options: ["بجسده الحي", "بذهنه الخاص", "بماله كله", "بكل قوته"], correct: 1 },
+        { q: "لا شيء من الدينونة على الذين هم في...؟", options: ["هيكل الله", "المسيح يسوع", "كل العالم", "مدينة روما"], correct: 1 },
+        { q: "اهتمام الجسد هو موت، واهتمام الروح هو...؟", options: ["تعب وقلق", "حياة وسلام", "نوم وراحة", "علم وفهم"], correct: 1 },
+        { q: "إن كان الله معنا، فمن هو...؟", options: ["من ينصرنا", "من علينا", "من يتركنا", "من يحبنا"], correct: 1 },
+        { q: "من سيفصلنا عن محبة المسيح العظيمة؟", options: ["الشدائد فقط", "لا أحد ابدا", "الخطايا فقط", "الموت فقط"], correct: 1 },
+        { q: "لمن هي التبني والمجد والعهود والاشتراع؟", options: ["للمصريين", "للرومانيين", "للاسرائيليين", "لليونانيين"], correct: 2 },
+        { q: "ليس لمن يشاء ولا لمن يسعى، بل لله الذي...؟", options: ["يعطي بكثرة", "يرحم الجميع", "يغفر الذنوب", "يعمل بقوة"], correct: 1 },
+        { q: "من هو غاية الناموس للبر لكل مؤمن؟", options: ["موسى النبي", "المسيح الرب", "بولس الرسول", "داود الملك"], correct: 1 },
+        { q: "بماذا يكون الإيمان حسب الرسالة؟", options: ["بالنظر فقط", "بالسمع فقط", "باللمس فقط", "بالخبر فقط"], correct: 3 },
+        { q: "هل رفض الله شعبه في العهد الجديد؟", options: ["نعم رفضهم", "حاشا لم يرفض", "في الماضي", "للوقت الحالي"], correct: 1 },
+        { q: "ماذا يطلب بولس أن نقدم أجسادنا لله؟", options: ["بخوراً زكياً", "ذبيحة حية", "تراباً فانياً", "صنماً ثابتاً"], correct: 1 },
+        { q: "تغيروا عن شكلكم بـ... أذهانكم؟", options: ["بتعليم أذهانكم", "بتجديد أذهانكم", "بترك أذهانكم", "بحفظ أذهانكم"], correct: 1 },
+        { q: "المحبة فلتكن دائماً بلا...؟", options: ["بلا خوف", "بلا رياء", "بلا تعب", "بلا حدود"], correct: 1 },
+        { q: "باركوا على الذين... طوال الوقت؟", options: ["يحبونكم", "يطردونكم", "يعطونكم", "يعينونكم"], correct: 1 },
+        { q: "فرحاً مع الفرحين و... مع الباكين؟", options: ["صلاة", "بكاءً", "صوماً", "حزناً"], correct: 1 },
+        { q: "ماذا تفعل إذا جاع عدوك تماماً؟", options: ["تجاهله فوراً", "أطعمه فوراً", "حاربه فوراً", "أدنه فوراً"], correct: 1 },
+        { q: "لا يغلبنك الشر بل اغلب الشر بـ...؟", options: ["بالقوة", "بالخير", "بالصبر", "بالصمت"], correct: 1 },
+        { q: "لتخضع كل نفس بشرية لـ...؟", options: ["لأهوائها", "للسلاطين", "لأصدقائها", "لأعدائها"], correct: 1 },
+        { q: "المحبة لا تصنع... للقريب أبداً؟", options: ["شراً", "خيراً", "حزناً", "فرحاً"], correct: 0 },
+        { q: "المحبة هي الحقيقة والجوهر لـ... الناموس؟", options: ["بداية", "تكميل", "نهاية", "هدم"], correct: 1 },
+        { q: "البسوا الرب يسوع ولا تصنعوا تدبيراً لـ...؟", options: ["للجسد", "للغد", "للبيت", "للمال"], correct: 0 },
+        { q: "من أنت الذي... عبد غيرك؟", options: ["تحب", "تدين", "تضرب", "تخاف"], correct: 1 },
+        { q: "ليس ملكوت الله أكلاً وشرباً، بل هو...؟", options: ["نوم وراحة", "بر وسلام", "تعب وعناء", "علم وفهم"], correct: 1 },
+        { q: "كل ما ليس من الإيمان فهو حتماً...؟", options: ["خطية", "مباح", "صواب", "نافع"], correct: 0 },
+        { q: "يجب على الأقوياء أن يحملوا... الضعفاء؟", options: ["أثقال", "أوهان", "أموال", "خطايا"], correct: 1 },
+        { q: "كل ما سبق وكُتب، كُتب لأجل...؟", options: ["الماضي", "تعليمنا", "اليهود", "العبرة"], correct: 1 },
+        { q: "أوصي بـ... أختنا التي تخدم الكنيسة؟", options: ["مريم", "فيبى", "دوره", "حنة"], correct: 1 },
+        { q: "من هما العاملان مع بولس في المسيح؟", options: ["أكيلا وأكيلا", "بريسكيلا وأكيلا", "لوقا ومرقس", "سمعان وبطرس"], correct: 1 },
+        { q: "سلموا بعضكم على بعض بـ...؟", options: ["بكلام طيب", "قبلة مقدسة", "رسالة حب", "هدية قيمة"], correct: 1 },
+        { q: "إله السلام سيسحق... تحت أرجلكم؟", options: ["الاعداء", "الشيطان", "المرضى", "الموتى"], correct: 1 },
+        { q: "من هو كاتب الرسالة الفعلي لبولس؟", options: ["تيموثاوس", "تيرتيوس", "غايس", "لوقا"], correct: 1 },
+        { q: "بماذا يختم بولس الرسالة في النهاية؟", options: ["بنعمة الرب", "بصلاة طويلة", "بشكر الناس", "بتحذير شديد"], correct: 0 }
+    ];
+
+    let current = 0, answers = new Array(questions.length).fill(null), timeLeft = 20 * 60, timer;
+
+    async function startQuiz() {
+        const name = document.getElementById('u-name').value;
+        const phone = document.getElementById('u-phone').value;
+        if(!name || !phone) return alert("من فضلك أدخل بياناتك");
+        if(localStorage.getItem(ATTEMPT_KEY)) {
+            alert("لقد شاركت مسبقاً من هذا الجهاز");
+            return;
+        }
+
+        try {
+            await auth.signInAnonymously();
+            switchScreen('quiz-screen');
+            document.getElementById('timer-box').style.display = 'inline-block';
+            initQuiz();
+            startTimer();
+        } catch(e) { alert("خطأ في الاتصال: " + e.message); }
+    }
+
+    function initQuiz() {
+        const wrapper = document.getElementById('q-wrapper');
+        const grid = document.getElementById('nav-grid');
+        wrapper.innerHTML = ""; grid.innerHTML = "";
+        questions.forEach((q, i) => {
+            const div = document.createElement('div');
+            div.className = `question-container ${i===0?'active-screen':''}`;
+            div.id = `q-cnt-${i}`;
+            div.innerHTML = `<div style="font-weight:bold; margin-bottom:15px; color:var(--primary)">${i+1}. ${q.q}</div>${q.options.map((opt, idx) => `<div class="option-item" id="opt-${i}-${idx}" onclick="select(${i}, ${idx})">${opt}</div>`).join('')}`;
+            wrapper.appendChild(div);
+            const dot = document.createElement('div');
+            dot.className = `nav-dot ${i===0?'current':''}`;
+            dot.id = `dot-${i}`; dot.innerText = i+1; dot.onclick = () => jump(i);
+            grid.appendChild(dot);
+        });
+    }
+
+    function select(qIdx, optIdx) {
+        answers[qIdx] = optIdx;
+        document.querySelectorAll(`#q-cnt-${qIdx} .option-item`).forEach((el, idx) => el.classList.toggle('selected', idx === optIdx));
+        document.getElementById(`dot-${qIdx}`).classList.add('answered');
+    }
+
+    function jump(n) {
+        document.querySelectorAll('.question-container').forEach(c => c.classList.remove('active-screen'));
+        document.querySelectorAll('.nav-dot').forEach(d => d.classList.remove('current'));
+        current = n;
+        document.getElementById(`q-cnt-${current}`).classList.add('active-screen');
+        document.getElementById(`dot-${current}`).classList.add('current');
+    }
+
+    function nav(step) { let t = current + step; if(t >= 0 && t < questions.length) jump(t); }
+
+    function startTimer() {
+        timer = setInterval(() => {
+            timeLeft--;
+            if(timeLeft <= 0) finish(true);
+            const m = Math.floor(timeLeft/60), s = timeLeft%60;
+            document.getElementById('timer-box').innerText = `${m}:${s<10?'0':''}${s}`;
+        }, 1000);
+    }
+
+    async function finish(auto = false) {
+        if(!auto && !confirm("هل تريد إنهاء المسابقة وإرسال النتيجة؟")) return;
+        clearInterval(timer);
+        let score = 0;
+        questions.forEach((q, i) => { if(answers[i] === q.correct) score++; });
+        
+        try {
+            await db.collection("romans_results").add({
+                name: document.getElementById('u-name').value,
+                phone: document.getElementById('u-phone').value,
+                score: score,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            localStorage.setItem(ATTEMPT_KEY, "true");
+            switchScreen('results-screen');
+            document.getElementById('final-score').innerText = `${score}/60`;
+            document.getElementById('timer-box').style.display = 'none';
+        } catch(e) { alert("خطأ في الحفظ: " + e.message); }
+    }
+
+    function showAdminLogin() {
+        if(prompt("كلمة السر:") === "24724") { switchScreen('admin-screen'); loadAdmin(); }
+    }
+
+    function switchScreen(id) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active-screen'));
+        document.getElementById(id).classList.add('active-screen');
+    }
+
+    async function loadAdmin() {
+        const content = document.getElementById('admin-content');
+        try {
+            const snap = await db.collection("romans_results").orderBy("score", "desc").get();
+            let h = `<table class="admin-table"><tr><th>الاسم</th><th>الدرجة</th><th>الهاتف</th></tr>`;
+            snap.forEach(d => { const r = d.data(); h += `<tr><td>${r.name}</td><td>${r.score}</td><td>${r.phone}</td></tr>`; });
+            content.innerHTML = h + "</table>";
+        } catch(e) { content.innerHTML = "خطأ: تأكد من تفعيل Firestore."; }
+    }
+</script>
+</body>
+</html>
