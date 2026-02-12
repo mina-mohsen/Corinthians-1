@@ -111,6 +111,14 @@
             width: 100%; 
         }
 
+        label {
+            font-size: 0.9rem;
+            font-weight: bold;
+            color: var(--secondary);
+            margin-bottom: -10px;
+            margin-right: 5px;
+        }
+
         .btn-main { 
             background: var(--primary); 
             color: white; 
@@ -170,12 +178,14 @@
 
         .btn-admin-link { position: absolute; top: 5px; right: 5px; background: none; border: none; color: #ccc; font-size: 0.7rem; }
 
-        /* Review Styles */
         .review-container { margin-top: 20px; border-top: 2px solid #eee; padding-top: 20px; }
         .review-card { padding: 15px; border-radius: 12px; margin-bottom: 15px; border: 1px solid #eee; font-size: 0.9rem; text-align: right; }
         .review-card.correct-card { border-right: 5px solid var(--success); background: #f0f9f4; }
         .review-card.wrong-card { border-right: 5px solid var(--danger); background: #fdf2f2; }
         .ref-tag { color: var(--accent); font-weight: bold; font-size: 0.85rem; display: block; margin-top: 5px; }
+
+        table { border-spacing: 0; width: 100%; }
+        th, td { padding: 10px; border: 1px solid #eee; text-align: center; }
     </style>
 </head>
 <body>
@@ -196,8 +206,14 @@
         <div style="text-align: center; color: var(--danger); font-weight: bold; padding: 12px; background: #fff8f0; border-radius: 10px; border: 1px dashed var(--danger); font-size: 0.9rem;">
             تنبيه: الاختبار متاح لمرة واحدة فقط.
         </div>
+        
         <input type="text" id="u-name" placeholder="الاسم بالكامل">
         <input type="tel" id="u-phone" placeholder="رقم الموبايل">
+        <input type="text" id="u-address" placeholder="العنوان بالتفصيل">
+        
+        <label for="u-birthdate">تاريخ الميلاد:</label>
+        <input type="date" id="u-birthdate">
+        
         <button class="btn-main" onclick="startQuiz()">بدء الاختبار</button>
     </div>
 
@@ -227,7 +243,7 @@
     </div>
 
     <div id="admin-screen" class="screen">
-        <h2 style="text-align: center;">النتائج</h2>
+        <h2 style="text-align: center;">لوحة تحكم النتائج</h2>
         <div id="admin-content" style="overflow-x:auto;">جاري التحميل...</div>
         <button class="btn-main" onclick="location.reload()">خروج</button>
     </div>
@@ -314,8 +330,14 @@
     let current = 0, answers = new Array(questions.length).fill(null), skipped = new Set(), timeLeft = 20 * 60, timer;
 
     async function startQuiz() {
-        if(!document.getElementById('u-name').value.trim() || !document.getElementById('u-phone').value.trim()) return alert("أدخل بياناتك أولاً.");
+        const name = document.getElementById('u-name').value.trim();
+        const phone = document.getElementById('u-phone').value.trim();
+        const address = document.getElementById('u-address').value.trim();
+        const birthdate = document.getElementById('u-birthdate').value;
+
+        if(!name || !phone || !address || !birthdate) return alert("برجاء ملء كافة البيانات (الاسم، الموبايل، العنوان، وتاريخ الميلاد).");
         if(localStorage.getItem(ATTEMPT_KEY)) return alert("لقد شاركت مسبقاً.");
+        
         try {
             await auth.signInAnonymously();
             switchScreen('quiz-screen');
@@ -396,6 +418,8 @@
             await db.collection("artifacts").doc(appId).collection("public").doc("data").collection("results").add({
                 name: document.getElementById('u-name').value,
                 phone: document.getElementById('u-phone').value,
+                address: document.getElementById('u-address').value,
+                birthdate: document.getElementById('u-birthdate').value,
                 score: score,
                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
             });
@@ -444,8 +468,22 @@
             const snap = await db.collection("artifacts").doc(appId).collection("public").doc("data").collection("results").get();
             let data = []; snap.forEach(d => data.push(d.data()));
             data.sort((a,b) => b.score - a.score);
-            let h = `<table style="width:100%; border-collapse:collapse; font-size:0.8rem; direction:rtl;"><tr style="background:#eee;"><th>الاسم</th><th>الدرجة</th></tr>`;
-            data.forEach(r => h += `<tr style="border-bottom:1px solid #ddd; text-align:center;"><td>${r.name}</td><td>${r.score}</td></tr>`);
+            let h = `<table style="direction:rtl;">
+                        <tr style="background:#eee;">
+                            <th>الاسم</th>
+                            <th>الدرجة</th>
+                            <th>الموبايل</th>
+                            <th>العنوان</th>
+                            <th>تاريخ الميلاد</th>
+                        </tr>`;
+            data.forEach(r => h += `
+                <tr style="border-bottom:1px solid #ddd;">
+                    <td>${r.name}</td>
+                    <td><b>${r.score}</b></td>
+                    <td>${r.phone}</td>
+                    <td style="font-size:0.7rem;">${r.address || '-'}</td>
+                    <td>${r.birthdate || '-'}</td>
+                </tr>`);
             content.innerHTML = h + "</table>";
         } catch(e) { content.innerHTML = "Error loading."; }
     }
