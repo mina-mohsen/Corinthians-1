@@ -5,21 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>مسابقة رسالة كورنثوس الأولى - الأصحاح الأول</title>
     
-    <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
-        import { getFirestore, collection, doc, addDoc, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+        import { getFirestore, collection, doc, addDoc, getDocs, serverTimestamp, query } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
         const firebaseConfig = JSON.parse(__firebase_config);
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'corinthians-quiz-1';
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'corinthians-quiz-ch1';
         
         let user = null;
 
-        // Force Auth immediately
         const initAuth = async () => {
             try {
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -27,12 +25,11 @@
                 } else {
                     await signInAnonymously(auth);
                 }
-            } catch (e) {
-                console.error("Auth Error", e);
-            }
+            } catch (e) { console.error("Auth Error", e); }
         };
-        initAuth();
+
         onAuthStateChanged(auth, (u) => { user = u; });
+        initAuth();
 
         const questions = [
             { q: "من هو الشخص الذي شارك بولس الرسول في إرسال التحية لكورنثوس؟", options: ["تيموثاوس", "سوسثانيس", "لوقا", "سيلا"], correct: 1, ref: "1:1" },
@@ -98,15 +95,15 @@
         ];
 
         let current = 0, answers = new Array(questions.length).fill(null), timeLeft = 20 * 60, timer;
-        const lockKey = "cor_lock_final_v1";
+        const lockKey = "lock_cor1_quiz_final";
 
         window.startQuiz = () => {
             const fields = ['u-name', 'u-phone', 'u-address', 'u-birthdate'];
-            for(let f of fields) if(!document.getElementById(f).value.trim()) return alert("برجاء ملء كافة البيانات.");
-            if(localStorage.getItem(lockKey)) return alert("لقد شاركت مسبقاً.");
+            for(let f of fields) if(!document.getElementById(f).value.trim()) return alert("برجاء ملء جميع البيانات.");
+            if(localStorage.getItem(lockKey)) return alert("لقد شاركت في المسابقة من هذا الجهاز مسبقاً.");
             
             switchScreen('quiz-screen');
-            document.getElementById('timer-box').style.display = 'inline-block';
+            document.getElementById('timer-box').style.display = 'block';
             initQuiz();
             startTimer();
         };
@@ -132,10 +129,11 @@
             answers[qIdx] = optIdx;
             document.querySelectorAll(`#q-cnt-${qIdx} .option-item`).forEach((el, idx) => el.classList.toggle('selected', idx === optIdx));
             document.getElementById(`dot-${qIdx}`).classList.add('answered');
-            setTimeout(() => nav(1), 200);
+            setTimeout(() => nav(1), 300);
         };
 
         window.jump = (n) => {
+            if(n < 0 || n >= questions.length) return;
             document.querySelectorAll('#q-wrapper .screen').forEach(c => c.classList.remove('active-screen'));
             document.querySelectorAll('.nav-dot').forEach(d => d.classList.remove('current'));
             current = n;
@@ -144,19 +142,19 @@
             document.getElementById('finish-btn').style.display = (current === questions.length - 1) ? 'block' : 'none';
         };
 
-        window.nav = (step) => { let t = current + step; if(t >= 0 && t < questions.length) jump(t); };
+        window.nav = (step) => jump(current + step);
 
         function startTimer() {
             timer = setInterval(() => {
                 timeLeft--;
                 if(timeLeft <= 0) finishQuiz(true);
                 const m = Math.floor(timeLeft/60), s = timeLeft%60;
-                document.getElementById('timer-box').innerText = `${m}:${s<10?'0':''}${s}`;
+                document.getElementById('timer-box').innerText = `الوقت المتبقي: ${m}:${s<10?'0':''}${s}`;
             }, 1000);
         }
 
         window.finishQuiz = async (auto = false) => {
-            if(!auto && !confirm("إنهاء الاختبار؟")) return;
+            if(!auto && !confirm("هل تريد إنهاء المسابقة وإرسال الإجابات؟")) return;
             clearInterval(timer);
             let score = 0;
             questions.forEach((q, i) => { if(answers[i] === q.correct) score++; });
@@ -165,12 +163,12 @@
             document.getElementById('final-score').innerText = `${score}/60`;
             document.getElementById('timer-box').style.display = 'none';
             generateReview();
-            localStorage.setItem(lockKey, "done");
+            localStorage.setItem(lockKey, "submitted");
 
-            // Save Attempt
             try {
-                const resultsCol = collection(db, "artifacts", appId, "public", "data", "results");
-                await addDoc(resultsCol, {
+                if (!user) await initAuth();
+                const resCol = collection(db, "artifacts", appId, "public", "data", "results");
+                await addDoc(resCol, {
                     name: document.getElementById('u-name').value,
                     phone: document.getElementById('u-phone').value,
                     address: document.getElementById('u-address').value,
@@ -187,40 +185,46 @@
             list.innerHTML = questions.map((q, i) => `
                 <div class="review-card ${answers[i] === q.correct ? 'correct-card' : 'wrong-card'}">
                     <b>${i+1}. ${q.q}</b><br>
-                    <span>إجابتك: ${answers[i] !== null ? q.options[answers[i]] : 'لا يوجد'}</span><br>
-                    ${answers[i] !== q.correct ? `<span style="color:green">الصح: ${q.options[q.correct]}</span><br>` : ''}
+                    <span>إجابتك: ${answers[i] !== null ? q.options[answers[i]] : 'لم تجب'}</span><br>
+                    ${answers[i] !== q.correct ? `<span style="color:green">الإجابة الصحيحة: ${q.options[q.correct]}</span><br>` : ''}
                     <small style="color:darkorange">المرجع: 1 كو ${q.ref}</small>
                 </div>
             `).join('');
         }
 
-        window.showReview = () => document.getElementById('review-list').style.display = 'block';
+        window.toggleReview = () => {
+            const r = document.getElementById('review-list');
+            r.style.display = r.style.display === 'none' ? 'block' : 'none';
+        };
 
         window.showAdmin = async () => {
-            const pass = prompt("كلمة السر:");
+            const pass = prompt("من فضلك أدخل الرقم السري للإدارة:");
             if(pass === "24724") {
                 switchScreen('admin-screen');
                 const content = document.getElementById('admin-content');
-                content.innerHTML = `<div style="padding:20px; text-align:center;">جاري جلب النتائج...</div>`;
+                content.innerHTML = `<div style="padding:20px;text-align:center">جاري تحميل النتائج...</div>`;
                 
                 try {
                     const col = collection(db, "artifacts", appId, "public", "data", "results");
                     const snap = await getDocs(col);
-                    let results = [];
-                    snap.forEach(d => results.push(d.data()));
+                    let res = [];
+                    snap.forEach(d => res.push(d.data()));
+                    res.sort((a,b) => (b.score || 0) - (a.score || 0));
                     
-                    if (results.length === 0) {
-                        content.innerHTML = `<div style="padding:20px; text-align:center;">لا توجد نتائج مسجلة حتى الآن.</div>`;
-                    } else {
-                        results.sort((a,b) => (b.score || 0) - (a.score || 0));
-                        content.innerHTML = `<table><tr><th>الاسم</th><th>الدرجة</th><th>الموبايل</th></tr>
-                            ${results.map(r => `<tr><td>${r.name}</td><td>${r.score}</td><td>${r.phone}</td></tr>`).join('')}
-                        </table>`;
-                    }
+                    content.innerHTML = `<table>
+                        <tr><th>الاسم</th><th>الدرجة</th><th>الموبايل</th><th>التاريخ</th></tr>
+                        ${res.map(r => `<tr>
+                            <td>${r.name}</td>
+                            <td>${r.score}</td>
+                            <td>${r.phone}</td>
+                            <td>${r.timestamp ? new Date(r.timestamp.seconds*1000).toLocaleDateString('ar-EG') : '-'}</td>
+                        </tr>`).join('')}
+                    </table>`;
                 } catch(e) { 
-                    content.innerHTML = `<div style="color:red; padding:20px; text-align:center;">حدث خطأ أثناء جلب البيانات. برجاء المحاولة مرة أخرى.</div>`;
-                    console.error(e);
+                    content.innerHTML = `<div style="color:red;padding:20px;">خطأ في جلب البيانات. تأكد من الإنترنت.</div>`;
                 }
+            } else if(pass !== null) {
+                alert("الرقم السري غير صحيح.");
             }
         };
 
@@ -231,33 +235,31 @@
     </script>
 
     <style>
-        :root { --p: #2c3e50; --s: #34495e; --win: #27ae60; --err: #c0392b; }
-        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { background: #f4f7f6; margin: 0; padding: 10px; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; }
-        .container { width: 100%; max-width: 500px; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
-        header { text-align: center; border-bottom: 2px solid #f1f1f1; margin-bottom: 20px; padding-bottom: 10px; }
-        #timer-box { color: var(--err); font-weight: bold; font-size: 1.2rem; display: none; margin-bottom: 10px; }
-        .screen { display: none; flex-direction: column; gap: 15px; }
+        :root { --p: #2c3e50; --s: #3498db; --win: #27ae60; --err: #e74c3c; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { background: #f0f2f5; margin: 0; padding: 15px; font-family: 'Segoe UI', Arial, sans-serif; display: flex; justify-content: center; }
+        .container { width: 100%; max-width: 550px; background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.1); }
+        header { background: var(--p); color: white; padding: 25px 20px; text-align: center; position: relative; }
+        #timer-box { position: absolute; top: 10px; left: 10px; font-size: 0.8rem; background: rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 15px; display: none; }
+        .screen { display: none; padding: 20px; flex-direction: column; gap: 15px; }
         .active-screen { display: flex; }
-        label { font-size: 0.85rem; color: #555; margin-bottom: -10px; margin-right: 5px; }
-        input { padding: 12px; border: 1px solid #ddd; border-radius: 8px; width: 100%; font-size: 1rem; transition: border 0.3s; }
-        input:focus { border-color: var(--p); outline: none; }
-        .btn-main { background: var(--p); color: white; padding: 14px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1rem; transition: opacity 0.2s; }
-        .btn-main:active { opacity: 0.8; }
-        .q-text { font-weight: bold; margin-bottom: 10px; font-size: 1.1rem; line-height: 1.4; color: var(--p); }
-        .option-item { background: #f8f9fa; padding: 12px; border: 1px solid #eee; border-radius: 8px; cursor: pointer; transition: all 0.2s; }
-        .option-item:hover { background: #e9ecef; }
-        .option-item.selected { background: #d1ecf1; border-color: #bee5eb; font-weight: bold; transform: scale(1.02); }
-        .nav-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 5px; margin-top: 15px; }
-        .nav-dot { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; background: #eee; border-radius: 4px; font-size: 0.7rem; cursor: pointer; }
-        .nav-dot.current { background: var(--p); color: white; }
+        input { padding: 14px; border: 2px solid #eee; border-radius: 10px; font-size: 1rem; width: 100%; transition: 0.3s; }
+        input:focus { border-color: var(--s); outline: none; }
+        .btn-main { background: var(--s); color: white; border: none; padding: 15px; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 1rem; }
+        .btn-main:hover { opacity: 0.9; }
+        .q-text { font-size: 1.2rem; font-weight: bold; color: var(--p); line-height: 1.5; margin-bottom: 10px; }
+        .option-item { background: #f8f9fa; padding: 15px; border: 2px solid #eee; border-radius: 12px; cursor: pointer; transition: 0.2s; }
+        .option-item.selected { background: #e3f2fd; border-color: var(--s); color: var(--p); font-weight: bold; }
+        .nav-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; margin-top: 20px; }
+        .nav-dot { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; background: #eee; border-radius: 6px; font-size: 0.75rem; cursor: pointer; }
+        .nav-dot.current { background: var(--p); color: white; border: 2px solid var(--s); }
         .nav-dot.answered { background: var(--win); color: white; }
-        .review-card { padding: 12px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #eee; }
-        .correct-card { border-right: 5px solid var(--win); background: #fafffb; }
-        .wrong-card { border-right: 5px solid var(--err); background: #fffafb; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85rem; }
-        th, td { border: 1px solid #eee; padding: 10px; text-align: center; }
-        th { background: #f8f9fa; }
+        .review-card { padding: 15px; border-radius: 12px; margin-bottom: 15px; border-right: 6px solid #ccc; background: #fdfdfd; }
+        .correct-card { border-color: var(--win); }
+        .wrong-card { border-color: var(--err); }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #eee; padding: 12px; text-align: center; font-size: 0.9rem; }
+        th { background: #f8f9fa; color: var(--p); }
     </style>
 </head>
 <body>
@@ -265,53 +267,51 @@
 <div class="container">
     <header>
         <div id="timer-box">20:00</div>
-        <h3 id="app-title" onclick="showAdmin()" style="cursor: pointer; margin: 0;">مسابقة 1 كورنثوس 1</h3>
-        <p style="font-size: 0.8rem; color: #888; margin-top: 5px;"></p>
+        <h2 id="app-title" onclick="showAdmin()" style="margin:0; cursor:pointer;">مسابقة رسالة كورنثوس الأولى</h2>
+        <div style="font-size: 0.9rem; margin-top: 8px; opacity: 0.9;">الأصحاح الأول (60 سؤال)</div>
     </header>
 
-    <!-- Registration -->
+    <!-- Reg -->
     <div id="reg-screen" class="screen active-screen">
-        <div style="text-align: center; margin-bottom: 10px;">
-            <img src="https://imgur.com/hH7HWvE.jpeg" style="width: 100px; height: 100px; border-radius: 50%; border: 3px solid #eee;">
+        <div style="text-align:center; margin-bottom: 10px;">
+            <div style="width: 80px; height: 80px; background: #f0f0f0; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 2rem;">📜</div>
         </div>
-        <input type="text" id="u-name" placeholder="الاسم الرباعي">
-        <input type="tel" id="u-phone" placeholder="رقم الموبايل (واتساب)">
-        <input type="text" id="u-address" placeholder="المنطقة / العنوان">
-        <label>تاريخ الميلاد:</label>
+        <input type="text" id="u-name" placeholder="الاسم الرباعي كما في البطاقة">
+        <input type="tel" id="u-phone" placeholder="رقم الموبايل">
+        <input type="text" id="u-address" placeholder="العنوان / المنطقة">
+        <label style="font-size: 0.8rem; color: #666; margin-bottom: -10px;">تاريخ الميلاد:</label>
         <input type="date" id="u-birthdate">
-        <button class="btn-main" onclick="startQuiz()">ابدأ المسابقة</button>
+        <button class="btn-main" onclick="startQuiz()">بدء المسابقة</button>
     </div>
 
     <!-- Quiz -->
     <div id="quiz-screen" class="screen">
         <div id="q-wrapper"></div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <button class="btn-main" style="background:#95a5a6" onclick="nav(-1)">السابق</button>
+            <button class="btn-main" style="background:#bdc3c7" onclick="nav(-1)">السابق</button>
             <button class="btn-main" onclick="nav(1)">التالي</button>
         </div>
-        <button id="finish-btn" class="btn-main" style="background:var(--win); display:none;" onclick="finishQuiz()">إنهاء وإرسال النتيجة</button>
+        <button id="finish-btn" class="btn-main" style="background:var(--win); display:none;" onclick="finishQuiz()">إرسال الإجابات النهائية</button>
         <div class="nav-grid" id="nav-grid"></div>
     </div>
 
     <!-- Results -->
-    <div id="results-screen" class="screen">
-        <div style="text-align: center; padding: 20px 0;">
-            <div style="font-size: 1.2rem; margin-bottom: 10px;">نتيجتك هي:</div>
-            <h1 id="final-score" style="color:var(--win); font-size: 3.5rem; margin: 0;">0/60</h1>
-            <p style="color: #666; margin-top: 15px;">شكراً لمشاركتك! تم حفظ النتيجة.</p>
-            <button class="btn-main" onclick="showReview()" style="width: 100%;">مراجعة الإجابات الصحيحة</button>
-        </div>
-        <div id="review-list" style="display: none; margin-top: 10px;"></div>
+    <div id="results-screen" class="screen" style="text-align: center;">
+        <h2 style="color:var(--p)">انتهت المسابقة</h2>
+        <div style="font-size: 1.2rem;">درجتك هي:</div>
+        <div id="final-score" style="font-size: 4rem; font-weight: bold; color: var(--win); margin: 20px 0;">0/60</div>
+        <p style="color:#7f8c8d;">تم حفظ النتيجة بنجاح في سجلات المسابقة.</p>
+        <button class="btn-main" onclick="toggleReview()" style="width:100%">مراجعة الأسئلة والحلول</button>
+        <div id="review-list" style="display:none; text-align: right; margin-top: 20px; max-height: 400px; overflow-y: auto;"></div>
     </div>
 
     <!-- Admin -->
     <div id="admin-screen" class="screen">
-        <h4 style="margin: 0; text-align: center;">لوحة إدارة النتائج</h4>
-        <div id="admin-content" style="overflow-x: auto; background: #fff; border-radius: 8px;"></div>
-        <button class="btn-main" onclick="location.reload()" style="background: var(--err);">خروج</button>
+        <h3 style="text-align: center; margin: 0;">نتائج المشاركين</h3>
+        <div id="admin-content" style="overflow-x: auto;"></div>
+        <button class="btn-main" onclick="location.reload()" style="background:var(--err)">خروج</button>
     </div>
 </div>
 
 </body>
 </html>
-
