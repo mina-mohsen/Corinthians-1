@@ -250,21 +250,20 @@
 </div>
 
 <script>
-    const firebaseConfig = {
-      apiKey: "", // Empty as requested
-      authDomain: "romans-quiz.firebaseapp.com",
-      projectId: "romans-quiz",
-      storageBucket: "romans-quiz.firebasestorage.app",
-      messagingSenderId: "838261164020",
-      appId: "1:838261164020:web:aaab35caf6c35c89411ba1"
-    };
-
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
-    const auth = firebase.auth();
+    // Initialize Firebase
+    let db, auth;
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'corinthians-quiz-1';
     const ATTEMPT_KEY = "corinthians_lock_v1";
 
-    // 60 Questions based on 1 Corinthians 1
+    try {
+        const firebaseConfig = JSON.parse(__firebase_config);
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.firestore();
+        auth = firebase.auth();
+    } catch (e) {
+        console.error("Firebase Init Error:", e);
+    }
+
     const questions = [
         { q: "من هو الشخص الذي شارك بولس الرسول في إرسال التحية لغلاطية وكورنثوس؟", options: ["تيموثاوس", "سوسثانيس", "لوقا", "سيلا"], correct: 1, ref: "1:1" },
         { q: "بماذا دُعي بولس في بداية الرسالة؟", options: ["رسولاً مختاراً", "رسولاً مدعواً", "خادماً لله", "تلميذاً للمسيح"], correct: 1, ref: "1:1" },
@@ -340,13 +339,22 @@
         if(localStorage.getItem(ATTEMPT_KEY)) return alert("لقد شاركت مسبقاً.");
         
         try {
-            await auth.signInAnonymously();
+            // Auth Rule 3: Wait for auth before anything else
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                await auth.signInWithCustomToken(__initial_auth_token);
+            } else {
+                await auth.signInAnonymously();
+            }
+
             switchScreen('quiz-screen');
             document.getElementById('timer-box').style.display = 'inline-block';
             document.getElementById('mini-logo').style.display = 'block';
             initQuiz();
             startTimer();
-        } catch(e) { alert("Error: " + e.message); }
+        } catch(e) { 
+            console.error("Login/Start error:", e);
+            alert("حدث خطأ في الاتصال بالخدمة. تأكد من جودة الإنترنت."); 
+        }
     }
 
     function initQuiz() {
@@ -401,7 +409,8 @@
             timeLeft--;
             if(timeLeft <= 0) finish(true);
             const m = Math.floor(timeLeft/60), s = timeLeft%60;
-            document.getElementById('timer-box').innerText = `${m}:${s<10?'0':''}${s}`;
+            const display = document.getElementById('timer-box');
+            if (display) display.innerText = `${m}:${s<10?'0':''}${s}`;
         }, 1000);
     }
 
@@ -415,22 +424,33 @@
         questions.forEach((q, i) => { if(answers[i] === q.correct) score++; });
         
         try {
-            const appId = typeof __app_id !== 'undefined' ? __app_id : 'corinthians-quiz-1';
-            await db.collection("artifacts").doc(appId).collection("public").doc("data").collection("results").add({
+            // Auth Check
+            const user = auth.currentUser;
+            if (!user) throw new Error("Not authenticated");
+
+            // Firestore Path Rule 1
+            const resultsRef = db.collection("artifacts").doc(appId).collection("public").doc("data").collection("results");
+            
+            await resultsRef.add({
                 name: document.getElementById('u-name').value,
                 phone: document.getElementById('u-phone').value,
                 address: document.getElementById('u-address').value,
                 birthdate: document.getElementById('u-birthdate').value,
                 score: score,
+                userId: user.uid,
                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
             });
+            
             localStorage.setItem(ATTEMPT_KEY, "true");
             switchScreen('results-screen');
             document.getElementById('mini-logo').style.display = 'none';
             document.getElementById('final-score').innerText = `${score}/60`;
             document.getElementById('timer-box').style.display = 'none';
             generateReview();
-        } catch(e) { alert("Error saving result."); }
+        } catch(e) { 
+            console.error("Save error:", e);
+            alert("فشل إرسال النتيجة. برجاء المحاولة مرة أخرى."); 
+        }
     }
 
     function generateReview() {
@@ -455,36 +475,62 @@
     }
 
     function showReview() {
-        document.getElementById('review-list').style.display = 'block';
-        window.scrollTo({ top: document.getElementById('review-list').offsetTop, behavior: 'smooth' });
+        const list = document.getElementById('review-list');
+        list.style.display = 'block';
+        window.scrollTo({ top: list.offsetTop, behavior: 'smooth' });
     }
 
-    function showAdminLogin() { if(prompt("Pass:") === "24724") { switchScreen('admin-screen'); loadAdmin(); } }
-    function switchScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.remove('active-screen')); document.getElementById(id).classList.add('active-screen'); }
+    function showAdminLogin() { 
+        if(prompt("كلمة المرور:") === "24724") { 
+            switchScreen('admin-screen'); 
+            loadAdmin(); 
+        } 
+    }
+
+    function switchScreen(id) { 
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active-screen')); 
+        const target = document.getElementById(id);
+        if (target) target.classList.add('active-screen'); 
+    }
 
     async function loadAdmin() {
         const content = document.getElementById('admin-content');
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'corinthians-quiz-1';
         try {
+            const user = auth.currentUser;
+            if (!user) {
+                await auth.signInAnonymously();
+            }
+
+            // Path Compliance Rule 1
             const snap = await db.collection("artifacts").doc(appId).collection("public").doc("data").collection("results").get();
-            let data = []; snap.forEach(d => data.push(d.data()));
-            data.sort((a,b) => b.score - a.score);
-            let h = `<table style="direction:rtl;">
+            
+            let data = []; 
+            snap.forEach(d => data.push(d.data()));
+            
+            // Sorting in memory (Rule 2)
+            data.sort((a,b) => (b.score || 0) - (a.score || 0));
+            
+            let h = `<table style="direction:rtl; width:100%;">
                         <tr style="background:#eee;">
                             <th>الاسم</th>
                             <th>الدرجة</th>
                             <th>الموبايل</th>
                             <th>العنوان</th>
                         </tr>`;
+            
             data.forEach(r => h += `
                 <tr style="border-bottom:1px solid #ddd;">
-                    <td>${r.name}</td>
-                    <td><b>${r.score}</b></td>
-                    <td>${r.phone}</td>
+                    <td>${r.name || 'مجهول'}</td>
+                    <td><b>${r.score || 0}</b></td>
+                    <td>${r.phone || '-'}</td>
                     <td style="font-size:0.7rem;">${r.address || '-'}</td>
                 </tr>`);
+            
             content.innerHTML = h + "</table>";
-        } catch(e) { content.innerHTML = "Error loading."; }
+        } catch(e) { 
+            console.error("Admin Load Error:", e);
+            content.innerHTML = "خطأ في تحميل البيانات."; 
+        }
     }
 </script>
 </body>
