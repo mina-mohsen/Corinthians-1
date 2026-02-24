@@ -203,7 +203,7 @@
         <div class="main-logo-container">
             <img src="https://imgur.com/hH7HWvE.jpeg" class="main-logo" alt="Meeting Logo">
         </div>
-        <div style="text-align: center; color: var(--danger); font-weight: bold; padding: 12px; background: #fff8f0; border-radius: 10px; border: 1px dashed var(--danger); font-size: 0.9rem;">
+        <div id="warning-box" style="text-align: center; color: var(--danger); font-weight: bold; padding: 12px; background: #fff8f0; border-radius: 10px; border: 1px dashed var(--danger); font-size: 0.9rem;">
             تنبيه: الاختبار متاح لمرة واحدة فقط.
         </div>
         
@@ -214,7 +214,7 @@
         <label for="u-birthdate">تاريخ الميلاد:</label>
         <input type="date" id="u-birthdate">
         
-        <button class="btn-main" onclick="startQuiz()">بدء الاختبار</button>
+        <button id="start-btn" class="btn-main" onclick="startQuiz()">بدء الاختبار</button>
     </div>
 
     <div id="quiz-screen" class="screen">
@@ -250,10 +250,19 @@
 </div>
 
 <script>
-    const firebaseConfig = JSON.parse(__firebase_config);
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
-    const auth = firebase.auth();
+    // Safe initialization of Firebase Config
+    let db, auth, appId;
+    try {
+        const configRaw = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
+        const firebaseConfig = JSON.parse(configRaw);
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.firestore();
+        auth = firebase.auth();
+        appId = typeof __app_id !== 'undefined' ? __app_id : 'corinthians-quiz-ch1';
+    } catch (e) {
+        console.error("Firebase init failed", e);
+    }
+
     const ATTEMPT_KEY = "corinthians_lock_v1_ch1";
 
     const questions = [
@@ -328,16 +337,30 @@
         const birthdate = document.getElementById('u-birthdate').value;
 
         if(!name || !phone || !address || !birthdate) return alert("برجاء ملء كافة البيانات.");
-        if(localStorage.getItem(ATTEMPT_KEY)) return alert("لقد شاركت مسبقاً.");
+        if(localStorage.getItem(ATTEMPT_KEY)) return alert("لقد شاركت مسبقاً من هذا الجهاز.");
         
+        const btn = document.getElementById('start-btn');
+        btn.innerText = "جاري الاتصال...";
+        btn.disabled = true;
+
         try {
-            await auth.signInAnonymously();
+            // Priority: __initial_auth_token or Anonymous
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                await auth.signInWithCustomToken(__initial_auth_token);
+            } else {
+                await auth.signInAnonymously();
+            }
+
             switchScreen('quiz-screen');
             document.getElementById('timer-box').style.display = 'inline-block';
             document.getElementById('mini-logo').style.display = 'block';
             initQuiz();
             startTimer();
-        } catch(e) { alert("Error: " + e.message); }
+        } catch(e) { 
+            alert("حدث خطأ في الاتصال: " + e.message); 
+            btn.innerText = "بدء الاختبار";
+            btn.disabled = false;
+        }
     }
 
     function initQuiz() {
@@ -407,22 +430,32 @@
         questions.forEach((q, i) => { if(answers[i] === q.correct) score++; });
         
         try {
-            const appId = typeof __app_id !== 'undefined' ? __app_id : 'corinthians-quiz-ch1';
-            await db.collection("artifacts").doc(appId).collection("public").doc("data").collection("results").add({
+            const user = auth.currentUser;
+            if (!user) throw new Error("Authentication failed");
+
+            // Correct path for artifacts
+            const path = db.collection("artifacts").doc(appId).collection("public").doc("data").collection("results");
+            
+            await path.add({
                 name: document.getElementById('u-name').value,
                 phone: document.getElementById('u-phone').value,
                 address: document.getElementById('u-address').value,
                 birthdate: document.getElementById('u-birthdate').value,
                 score: score,
+                uid: user.uid,
                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
             });
+
             localStorage.setItem(ATTEMPT_KEY, "true");
             switchScreen('results-screen');
             document.getElementById('mini-logo').style.display = 'none';
             document.getElementById('final-score').innerText = `${score}/60`;
             document.getElementById('timer-box').style.display = 'none';
             generateReview();
-        } catch(e) { alert("Error saving result."); }
+        } catch(e) { 
+            console.error(e);
+            alert("فشل إرسال النتيجة. يرجى تصوير الشاشة والتواصل مع المسؤول."); 
+        }
     }
 
     function generateReview() {
@@ -456,7 +489,6 @@
 
     async function loadAdmin() {
         const content = document.getElementById('admin-content');
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'corinthians-quiz-ch1';
         try {
             const snap = await db.collection("artifacts").doc(appId).collection("public").doc("data").collection("results").get();
             let data = []; snap.forEach(d => data.push(d.data()));
@@ -476,7 +508,7 @@
                     <td>${r.address || '-'}</td>
                 </tr>`);
             content.innerHTML = h + "</table>";
-        } catch(e) { content.innerHTML = "Error loading."; }
+        } catch(e) { content.innerHTML = "Error loading: " + e.message; }
     }
 </script>
 </body>
