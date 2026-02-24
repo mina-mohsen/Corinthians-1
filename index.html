@@ -14,7 +14,6 @@
         let db, auth, user;
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'corinthians-quiz-1';
         
-        // Setup Firebase with retries
         async function initFirebase() {
             try {
                 const firebaseConfig = JSON.parse(__firebase_config);
@@ -22,26 +21,18 @@
                 auth = getAuth(app);
                 db = getFirestore(app);
 
-                const login = async (retryCount = 0) => {
+                const login = async () => {
                     try {
                         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                             await signInWithCustomToken(auth, __initial_auth_token);
                         } else {
                             await signInAnonymously(auth);
                         }
-                    } catch (e) {
-                        if (retryCount < 5) {
-                            const delay = Math.pow(2, retryCount) * 1000;
-                            setTimeout(() => login(retryCount + 1), delay);
-                        }
-                    }
+                    } catch (e) { console.error("Auth retry background"); }
                 };
-                
                 login();
                 onAuthStateChanged(auth, (u) => { user = u; });
-            } catch (e) {
-                console.error("Initialization error", e);
-            }
+            } catch (e) { console.error("Config error"); }
         }
 
         initFirebase();
@@ -79,7 +70,7 @@
             { q: "ماذا يطلب اليهود؟", options: ["حكمة", "آية", "مالاً", "سلطة"], correct: 1, ref: "1:22" },
             { q: "ماذا يطلب اليونانيون؟", options: ["آيات", "حكمة", "أساطير", "أوثان"], correct: 1, ref: "1:22" },
             { q: "نحن نكرز بـ...؟", options: ["المسيح مصلوباً", "المسيح ملكاً أرضياً", "المسيح فيلسوفاً", "المسيح غنياً"], correct: 0, ref: "1:23" },
-            { q: "المسيح المصلوب لليهود هو...? ", options: ["قوة", "عثرة", "حكمة", "فرح"], correct: 1, ref: "1:23" },
+            { q: "المسيح المصلوب لليهود هو...؟", options: ["قوة", "عثرة", "حكمة", "فرح"], correct: 1, ref: "1:23" },
             { q: "المسيح المصلوب لليونانيين هو...؟", options: ["جهالة", "منطق", "حقيقة", "سر"], correct: 0, ref: "1:23" },
             { q: "المسيح هو قوة الله و... الله للمدعوين؟", options: ["مجد", "حكمة", "رحمة", "خوف"], correct: 1, ref: "1:24" },
             { q: "جهالة الله أحكم من...؟", options: ["الناس", "الملائكة", "الشياطين", "الفلاسفة"], correct: 0, ref: "1:25" },
@@ -113,9 +104,8 @@
         const lockKey = "corinth_lock_1";
 
         window.startQuiz = () => {
-            const name = document.getElementById('u-name').value.trim();
-            const phone = document.getElementById('u-phone').value.trim();
-            if(!name || !phone) return alert("برجاء إدخال الاسم والموبايل.");
+            const fields = ['u-name', 'u-phone', 'u-address', 'u-birthdate'];
+            for(let f of fields) if(!document.getElementById(f).value.trim()) return alert("برجاء ملء كافة البيانات.");
             if(localStorage.getItem(lockKey)) return alert("لقد شاركت مسبقاً.");
             
             switchScreen('quiz-screen');
@@ -174,25 +164,25 @@
             let score = 0;
             questions.forEach((q, i) => { if(answers[i] === q.correct) score++; });
             
-            // UI change first so user knows it's finished
             switchScreen('results-screen');
             document.getElementById('final-score').innerText = `${score}/60`;
             document.getElementById('timer-box').style.display = 'none';
             generateReview();
             localStorage.setItem(lockKey, "done");
 
-            // Attempt to save in background
             if (user && db) {
                 try {
                     const resultsCol = collection(db, "artifacts", appId, "public", "data", "results");
                     await addDoc(resultsCol, {
                         name: document.getElementById('u-name').value,
                         phone: document.getElementById('u-phone').value,
+                        address: document.getElementById('u-address').value,
+                        birthdate: document.getElementById('u-birthdate').value,
                         score: score,
                         uid: user.uid,
                         timestamp: serverTimestamp()
                     });
-                } catch (e) { console.error("Background save failed", e); }
+                } catch (e) { console.error("Save background failed"); }
             }
         };
 
@@ -210,6 +200,25 @@
 
         window.showReview = () => document.getElementById('review-list').style.display = 'block';
 
+        window.showAdmin = async () => {
+            const pass = prompt("كلمة السر:");
+            if(pass === "24724") {
+                switchScreen('admin-screen');
+                const content = document.getElementById('admin-content');
+                content.innerText = "جاري التحميل...";
+                try {
+                    const col = collection(db, "artifacts", appId, "public", "data", "results");
+                    const snap = await getDocs(col);
+                    let results = [];
+                    snap.forEach(d => results.push(d.data()));
+                    results.sort((a,b) => b.score - a.score);
+                    content.innerHTML = `<table><tr><th>الاسم</th><th>الدرجة</th><th>التاريخ</th></tr>
+                        ${results.map(r => `<tr><td>${r.name}</td><td>${r.score}</td><td>${r.birthdate || '-'}</td></tr>`).join('')}
+                    </table>`;
+                } catch(e) { content.innerText = "فشل في جلب البيانات."; }
+            }
+        };
+
         function switchScreen(id) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active-screen'));
             document.getElementById(id).classList.add('active-screen');
@@ -221,10 +230,11 @@
         * { box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
         body { background: #ecf0f1; margin: 0; padding: 10px; display: flex; justify-content: center; }
         .container { width: 100%; max-width: 500px; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        header { text-align: center; border-bottom: 2px solid #eee; margin-bottom: 15px; }
+        header { text-align: center; border-bottom: 2px solid #eee; margin-bottom: 15px; position: relative; }
         #timer-box { color: var(--err); font-weight: bold; font-size: 1.1rem; display: none; }
         .screen { display: none; flex-direction: column; gap: 12px; }
         .active-screen { display: flex; }
+        label { font-size: 0.8rem; color: #666; margin-bottom: -10px; margin-right: 5px; }
         input { padding: 10px; border: 1px solid #ddd; border-radius: 6px; width: 100%; font-size: 0.9rem; }
         .btn-main { background: var(--p); color: white; padding: 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
         .q-text { font-weight: bold; margin-bottom: 8px; font-size: 1rem; }
@@ -237,6 +247,8 @@
         .review-card { padding: 8px; border-radius: 6px; margin-bottom: 8px; font-size: 0.85rem; border: 1px solid #eee; }
         .correct-card { border-right: 4px solid var(--win); background: #f0fff4; }
         .wrong-card { border-right: 4px solid var(--err); background: #fff5f5; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.75rem; }
+        th, td { border: 1px solid #eee; padding: 6px; text-align: center; }
     </style>
 </head>
 <body>
@@ -244,18 +256,23 @@
 <div class="container">
     <header>
         <div id="timer-box">20:00</div>
-        <h3>مسابقة 1 كورنثوس 1</h3>
+        <h3 id="app-title" onclick="showAdmin()">مسابقة 1 كورنثوس 1</h3>
     </header>
 
+    <!-- Registration -->
     <div id="reg-screen" class="screen active-screen">
         <div style="text-align: center;">
             <img src="https://imgur.com/hH7HWvE.jpeg" style="width: 80px; height: 80px; border-radius: 50%;">
         </div>
         <input type="text" id="u-name" placeholder="الاسم الكامل">
         <input type="tel" id="u-phone" placeholder="رقم الموبايل">
+        <input type="text" id="u-address" placeholder="العنوان">
+        <label>تاريخ الميلاد:</label>
+        <input type="date" id="u-birthdate">
         <button class="btn-main" onclick="startQuiz()">ابدأ الآن</button>
     </div>
 
+    <!-- Quiz -->
     <div id="quiz-screen" class="screen">
         <div id="q-wrapper"></div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
@@ -266,6 +283,7 @@
         <div class="nav-grid" id="nav-grid"></div>
     </div>
 
+    <!-- Results -->
     <div id="results-screen" class="screen">
         <div style="text-align: center;">
             <h1 id="final-score" style="color:var(--win); font-size: 2.5rem;">0/60</h1>
@@ -273,6 +291,13 @@
             <button class="btn-main" onclick="showReview()">مراجعة الإجابات</button>
         </div>
         <div id="review-list" style="display: none; margin-top: 15px;"></div>
+    </div>
+
+    <!-- Admin -->
+    <div id="admin-screen" class="screen">
+        <h4>لوحة التحكم</h4>
+        <div id="admin-content" style="overflow-x: auto;"></div>
+        <button class="btn-main" onclick="location.reload()">خروج</button>
     </div>
 </div>
 
