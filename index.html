@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>مسابقة رسالة كورنثوس الأولى (كاملة)</title>
+    <title>مسابقة رسالة كورنثوس الأولى</title>
     <style>
         :root {
             --primary: #2c3e50;
@@ -66,61 +66,58 @@
         .ref-tag { color: var(--accent); font-weight: bold; font-size: 0.85rem; display: block; margin-top: 5px; }
 
         .block-message { text-align: center; color: var(--danger); font-weight: bold; padding: 20px; }
-        
-        #status-msg { font-size: 0.85rem; margin-top: 5px; text-align: center; color: var(--primary); }
+        #status-msg { font-size: 1rem; margin-top: 15px; text-align: center; padding: 10px; border-radius: 10px; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <header>
-        <h1>مسابقة رسالة كورنثوس الأولى (1-16)</h1>
+        <h1>مسابقة رسالة كورنثوس الأولى</h1>
         <div id="timer-box" style="display:none;">25:00</div>
     </header>
 
-    <!-- شاشة الحظر -->
+    <!-- Blocked Screen -->
     <div id="block-screen" class="screen">
         <div class="block-message">
             <h2>عذراً!</h2>
-            <p>لقد قمت بحل هذه المسابقة مسبقاً من هذا الجهاز. لضمان تكافؤ الفرص، يُسمح بالمشاركة مرة واحدة فقط.</p>
-            <p style="font-size: 0.8rem; color: #95a5a6; margin-top: 20px;">(إذا كنت المسؤول، يمكنك كتابة كود المسح في شاشة التسجيل)</p>
-            <button class="btn-main" onclick="switchScreen('reg-screen')">العودة لتجربة كود المسح</button>
+            <p>لقد شاركت بالفعل في هذه المسابقة. يُسمح بمحاولة واحدة فقط لكل مستخدم.</p>
+            <button class="btn-main" style="margin-top:20px" onclick="switchScreen('reg-screen')">العودة (للمسؤول فقط)</button>
         </div>
     </div>
 
-    <!-- تسجيل البيانات -->
+    <!-- Registration -->
     <div id="reg-screen" class="active-screen screen">
         <div style="text-align: center;"><img src="https://imgur.com/hH7HWvE.jpeg" style="width: 100px; height: 100px; border-radius: 50%;" alt="logo"></div>
         <input type="text" id="u-name" placeholder="الاسم بالكامل">
         <input type="tel" id="u-phone" placeholder="رقم الموبايل">
-        <input type="text" id="u-address" placeholder="العنوان (المنطقة / الكنيسة)">
+        <input type="text" id="u-address" placeholder="العنوان أو الكنيسة">
         <label for="u-birthdate">تاريخ الميلاد:</label>
         <input type="date" id="u-birthdate">
         <button class="btn-main" onclick="startQuiz()">بدء الاختبار</button>
     </div>
 
-    <!-- شاشة الأسئلة -->
+    <!-- Questions -->
     <div id="quiz-screen" class="screen">
         <div id="q-wrapper"></div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <button class="btn-main" style="background:#95a5a6;" onclick="nav(-1)">السابق</button>
             <button class="btn-main" onclick="nav(1)">التالي</button>
         </div>
-        <button class="btn-main btn-skip" onclick="skipCurrent()">تأجيل السؤال (لاحقاً)</button>
+        <button class="btn-main btn-skip" onclick="skipCurrent()">تأجيل السؤال</button>
         <button id="finish-btn" class="btn-main" style="background:var(--success); display: none; margin-top: 5px;" onclick="finishQuiz()">إنهاء وحفظ النتيجة</button>
         <div class="nav-grid" id="nav-grid"></div>
     </div>
 
-    <!-- شاشة النهاية -->
+    <!-- Results -->
     <div id="finish-screen" class="screen">
         <div style="text-align:center;">
-            <h2 style="color: var(--success);">انتهى الاختبار!</h2>
-            <div id="final-score" style="font-size: 3.5rem; font-weight: bold; color: var(--primary);">0/50</div>
+            <h2 style="color: var(--success);">تمت عملية الإرسال!</h2>
+            <div id="status-msg">جاري التأكيد...</div>
+            <div id="final-score" style="font-size: 3rem; font-weight: bold; color: var(--primary); margin: 15px 0;">0/50</div>
+            <p style="color: #7f8c8d;">تم تسجيل إجاباتك بنجاح في قاعدة البيانات.</p>
             
-            <div id="status-msg"></div>
-
-            <button class="btn-main" style="background:#25D366; margin-bottom: 10px; width: 100%; margin-top:15px;" onclick="sendToWhatsApp()">إرسال نسخة عبر الواتساب</button>
-            <button class="btn-main" style="background:#3498db; width: 100%;" onclick="toggleReview()">مراجعة الإجابات</button>
+            <button class="btn-main" style="background:#3498db; width: 100%; margin-top: 15px;" onclick="toggleReview()">مراجعة الإجابات</button>
         </div>
         <div id="review-list" style="display:none; margin-top: 20px; border-top: 2px solid #eee; padding-top: 20px;"></div>
     </div>
@@ -185,23 +182,15 @@
     let current = 0, answers = new Array(questions.length).fill(null), skipped = new Set(), timeLeft = 25 * 60, timer;
     let userData = {};
 
-    window.onload = function() {
-        // تم تعديل هذا الجزء للسماح لك بالدخول لشاشة التسجيل حتى لو كنت محظوراً لمسح الحظر بكود السر
-        console.log("Ready to start or reset.");
-    };
-
     function startQuiz() {
         const nameInput = document.getElementById('u-name').value.trim();
-        
-        // فحص كود السر أولاً لمسح الحظر
-        if (nameInput === "admin24724") {
+        if (nameInput === "adminreset") {
             localStorage.removeItem('quiz_completed_1co');
-            alert("تم مسح بيانات الحظر من هذا الجهاز بنجاح. يمكنك المشاركة الآن.");
+            alert("تم مسح الحظر بنجاح.");
             location.reload();
             return;
         }
 
-        // فحص الحظر الطبيعي للمستخدمين
         if (localStorage.getItem('quiz_completed_1co')) {
             switchScreen('block-screen');
             return;
@@ -242,31 +231,19 @@
 
     function select(qIdx, optIdx) {
         answers[qIdx] = optIdx;
-        skipped.delete(qIdx);
         document.querySelectorAll(`#q-cnt-${qIdx} .option-item`).forEach((el, idx) => el.classList.toggle('selected', idx === optIdx));
-        const dot = document.getElementById(`dot-${qIdx}`);
-        dot.classList.remove('skipped');
-        dot.classList.add('answered');
-        setTimeout(() => nav(1), 300);
-    }
-
-    function skipCurrent() {
-        if(answers[current] === null) {
-            skipped.add(current);
-            document.getElementById(`dot-${current}`).classList.add('skipped');
-        }
-        nav(1);
+        document.getElementById(`dot-${qIdx}`).classList.add('answered');
+        setTimeout(() => nav(1), 250);
     }
 
     function jump(n) {
         if(n < 0 || n >= questions.length) return;
-        document.querySelectorAll('#q-wrapper .screen').forEach(c => c.classList.remove('active-screen'));
+        document.querySelectorAll('#q-wrapper > div').forEach(c => c.classList.remove('active-screen'));
         document.querySelectorAll('.nav-dot').forEach(d => d.classList.remove('current'));
         current = n;
         document.getElementById(`q-cnt-${current}`).classList.add('active-screen');
         document.getElementById(`dot-${current}`).classList.add('current');
         document.getElementById('finish-btn').style.display = (current === questions.length - 1) ? 'block' : 'none';
-        window.scrollTo(0,0);
     }
 
     function nav(step) { let t = current + step; if(t >= 0 && t < questions.length) jump(t); }
@@ -297,13 +274,9 @@
 
     async function saveToGoogleSheets(score) {
         const status = document.getElementById('status-msg');
-        status.innerText = "جاري حفظ النتيجة في السجل...";
+        status.innerText = "جاري إرسال النتيجة للسجل...";
 
-        const data = {
-            ...userData,
-            score: score,
-            timestamp: new Date().toLocaleString('ar-EG')
-        };
+        const data = { ...userData, score: score, timestamp: new Date().toLocaleString('ar-EG') };
 
         try {
             await fetch(SCRIPT_URL, {
@@ -312,10 +285,11 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
             });
-            status.innerText = "تم حفظ النتيجة في سجل جوجل بنجاح ✅";
+            status.innerText = "تم حفظ النتائج بنجاح ✅";
             status.style.color = "var(--success)";
+            status.style.fontWeight = "bold";
         } catch (error) {
-            status.innerText = "حدث خطأ أثناء الحفظ التلقائي، يمكنك الإرسال يدوياً عبر الواتساب.";
+            status.innerText = "حدث خطأ في الاتصال، لكن نتيجتك مسجلة محلياً.";
             status.style.color = "var(--danger)";
         }
     }
@@ -332,7 +306,6 @@
                         <span>إجابتك: ${answers[i] !== null ? q.options[answers[i]] : 'لم يتم الإجابة'}</span>
                         ${!isCorrect ? `<br><span style="color:var(--success)">الصحيح: ${q.options[q.correct]}</span>` : ''}
                     </div>
-                    <span class="ref-tag">المرجع: (1 كو ${q.ref})</span>
                 </div>`;
         });
         reviewList.innerHTML = html;
@@ -343,23 +316,6 @@
         list.style.display = list.style.display === 'none' ? 'block' : 'none';
     }
 
-    function sendToWhatsApp() {
-        const myNumber = "971568326116";
-        let score = 0;
-        questions.forEach((q, i) => { if(answers[i] === q.correct) score++; });
-
-        const message = `*نتيجة مسابقة رسالة كورنثوس الأولى (1-16)*%0A` +
-                        `--------------------------%0A` +
-                        `👤 *الاسم:* ${userData.name}%0A` +
-                        `📞 *الموبايل:* ${userData.phone}%0A` +
-                        `🏠 *العنوان:* ${userData.address}%0A` +
-                        `📅 *تاريخ الميلاد:* ${userData.birthdate}%0A` +
-                        `🏆 *الدرجة:* ${score} / 50%0A` +
-                        `--------------------------`;
-        
-        window.open(`https://wa.me/${myNumber}?text=${message}`, '_blank');
-    }
-
     function switchScreen(id) { 
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active-screen')); 
         document.getElementById(id).classList.add('active-screen'); 
@@ -367,4 +323,3 @@
 </script>
 </body>
 </html>
-
