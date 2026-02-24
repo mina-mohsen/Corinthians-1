@@ -64,6 +64,9 @@
         .review-card.correct-card { border-right: 5px solid var(--success); background: #f0f9f4; }
         .review-card.wrong-card { border-right: 5px solid var(--danger); background: #fdf2f2; }
         .ref-tag { color: var(--accent); font-weight: bold; font-size: 0.85rem; display: block; margin-top: 5px; }
+
+        /* Block Screen Styling */
+        .block-message { text-align: center; color: var(--danger); font-weight: bold; padding: 20px; }
     </style>
 </head>
 <body>
@@ -73,6 +76,14 @@
         <h1>مسابقة رسالة كورنثوس الأولى (1-16)</h1>
         <div id="timer-box" style="display:none;">25:00</div>
     </header>
+
+    <!-- شاشة الحظر (إذا حل المسابقة مسبقاً) -->
+    <div id="block-screen" class="screen">
+        <div class="block-message">
+            <h2>عذراً!</h2>
+            <p>لقد قمت بحل هذه المسابقة مسبقاً من هذا الجهاز. لضمان تكافؤ الفرص، يُسمح بالمشاركة مرة واحدة فقط.</p>
+        </div>
+    </div>
 
     <!-- تسجيل البيانات -->
     <div id="reg-screen" class="active-screen screen">
@@ -180,7 +191,19 @@
     let current = 0, answers = new Array(questions.length).fill(null), skipped = new Set(), timeLeft = 25 * 60, timer;
     let userData = {};
 
+    // التحقق من حالة الجهاز عند التحميل
+    window.onload = function() {
+        if (localStorage.getItem('quiz_completed_1co')) {
+            switchScreen('block-screen');
+        }
+    };
+
     function startQuiz() {
+        if (localStorage.getItem('quiz_completed_1co')) {
+            switchScreen('block-screen');
+            return;
+        }
+
         userData = {
             name: document.getElementById('u-name').value.trim(),
             phone: document.getElementById('u-phone').value.trim(),
@@ -256,6 +279,10 @@
 
     function finishQuiz() {
         clearInterval(timer);
+        
+        // حفظ حالة الإتمام لمنع التكرار من نفس الجهاز
+        localStorage.setItem('quiz_completed_1co', 'true');
+
         let score = 0;
         questions.forEach((q, i) => { if(answers[i] === q.correct) score++; });
         
